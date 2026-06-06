@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MoM Dashboard - Minute of Meeting</title>
+    <!-- GANTI CDN PAKAI YANG PASTI AMAN -->
+    <script src="https://unpkg.com/@supabase/supabase-js@2.39.0/dist/umd/supabase.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 2rem;
+        }
+        .container { max-width: 1400px; margin: 0 auto; }
+        .card {
+            background: white;
+            border-radius: 1rem;
+            padding: 2rem;
+            box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1);
+            margin-bottom: 2rem;
+        }
+        .auth-card { max-width: 450px; margin: 50px auto; }
+        .form-group { margin-bottom: 1rem; }
+        label { display: block; margin-bottom: 0.5rem; font-weight: 600; color: #333; }
+        input, textarea {
+            width: 100%;
+            padding: 0.75rem;
+            border: 2px solid #e2e8f0;
+            border-radius: 0.5rem;
+            font-size: 1rem;
+            transition: all 0.3s;
+        }
+        input:focus, textarea:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102,126,234,0.1);
+        }
+        button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.5rem;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            width: 100%;
+        }
+        button:hover { background: #5a67d8; transform: translateY(-2px); }
+        button.danger { background: #f56565; }
+        button.secondary { background: #48bb78; }
+        .error-msg {
+            background: #fed7d7;
+            color: #c53030;
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            margin-top: 1rem;
+            display: none;
+        }
+        .success-msg {
+            background: #c6f6d5;
+            color: #22543d;
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            margin-top: 1rem;
+            display: none;
+        }
+        .meeting-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 1.5rem;
+            margin-top: 1.5rem;
+        }
+        .meeting-item {
+            background: #f7fafc;
+            border-radius: 0.75rem;
+            padding: 1.25rem;
+            border-left: 4px solid #667eea;
+        }
+        .meeting-title { font-size: 1.2rem; font-weight: 700; color: #2d3748; margin-bottom: 0.5rem; }
+        .meeting-date { font-size: 0.85rem; color: #718096; margin-bottom: 0.75rem; }
+        .meeting-summary { color: #4a5568; margin-bottom: 1rem; line-height: 1.5; }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+        .header h1 { color: #2d3748; font-size: 1.8rem; }
+        .btn-small { padding: 0.4rem 1rem; font-size: 0.875rem; width: auto; }
+        .button-group { display: flex; gap: 0.5rem; margin-top: 1rem; }
+        .button-group button { width: auto; padding: 0.4rem 1rem; font-size: 0.875rem; }
+        .stats { display: flex; gap: 1rem; margin-bottom: 1.5rem; }
+        .stat-box { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 1rem; border-radius: 0.5rem; flex: 1; text-align: center; }
+        .stat-number { font-size: 2rem; font-weight: bold; }
+        .stat-label { font-size: 0.875rem; opacity: 0.9; }
+        @media (max-width: 768px) { body { padding: 1rem; } .meeting-grid { grid-template-columns: 1fr; } .header h1 { font-size: 1.4rem; } }
+    </style>
+</head>
+<body>
+<div class="container">
+    <!-- Auth Section -->
+    <div id="auth-section" class="card auth-card">
+        <h2 style="text-align: center; margin-bottom: 1.5rem;">🔐 Login Dashboard MoM</h2>
+        <div class="form-group">
+            <label>Email</label>
+            <input type="email" id="email" placeholder="contoh@email.com" />
+        </div>
+        <div class="form-group">
+            <label>Password</label>
+            <input type="password" id="password" placeholder="Minimal 6 karakter" />
+        </div>
+        <button id="loginBtn">Login / Daftar</button>
+        <div id="auth-error" class="error-msg"></div>
+        <div id="auth-success" class="success-msg"></div>
+        <p style="margin-top: 1rem; font-size: 0.8rem; color: #718096; text-align: center;">
+            ⚡ Belum punya akun? Akan otomatis terdaftar saat login pertama.
+        </p>
+    </div>
+
+    <!-- Dashboard Section -->
+    <div id="dashboard" style="display: none;">
+        <div class="card">
+            <div class="header">
+                <h1>📝 Minute of Meeting Dashboard</h1>
+                <button id="logoutBtn" class="danger btn-small">🚪 Logout</button>
+            </div>
+            <div class="stats">
+                <div class="stat-box"><div class="stat-number" id="total-meetings">0</div><div class="stat-label">Total Rapat</div></div>
+                <div class="stat-box"><div class="stat-number" id="total-actions">0</div><div class="stat-label">Action Items</div></div>
+            </div>
+            <h3>✨ Buat Notula Baru</h3>
+            <div class="form-group">
+                <label>Judul Rapat</label>
+                <input type="text" id="title" placeholder="Contoh: Rapat Evaluasi Q1 2026" />
+            </div>
+            <div class="form-group">
+                <label>Tanggal Rapat</label>
+                <input type="date" id="date" />
+            </div>
+            <div class="form-group">
+                <label>Ringkasan Hasil Rapat</label>
+                <textarea id="summary" rows="4" placeholder="Tulis ringkasan rapat..."></textarea>
+            </div>
+            <button id="saveMeetingBtn" class="secondary">💾 Simpan Rapat</button>
+        </div>
+        <div class="card">
+            <h3>📋 Daftar Risalah Rapat</h3>
+            <div id="meeting-list" class="meeting-grid">
+                <p style="color: #718096; text-align: center;">Loading...</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // ============ 🔧 GANTI DENGAN CREDENTIALS SUPABASE KAMU ============
+    const SUPABASE_URL = 'https://bmuhaeqomqbyrbzukvga.supabase.co';
+    const SUPABASE_ANON_KEY = 'sb_publishable_z0l8EHXKeqAZk92zj-jBGw_4sEFJn4F';
+    // =================================================================
+
+    console.log('🔵 Aplikasi dimulai...');
+    console.log('📡 Supabase URL:', SUPABASE_URL);
+
+    // Inisialisasi Supabase
+    let supabase;
+    try {
+        supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        console.log('✅ Supabase client siap');
+    } catch (err) {
+        console.error('❌ Gagal init Supabase:', err);
+        alert('Error koneksi Supabase. Cek URL dan Key!');
+    }
+
+    // DOM Elements
+    const authSection = document.getElementById('auth-section');
+    const dashboardSection = document.getElementById('dashboard');
+    const loginBtn = document.getElementById('loginBtn');
+    const logoutBtn = document.getElementById('logoutBtn');
+    const saveMeetingBtn = document.getElementById('saveMeetingBtn');
+    const emailInput = document.getElementById('email');
+    const passwordInput = document.getElementById('password');
+    const errorDiv = document.getElementById('auth-error');
+    const successDiv = document.getElementById('auth-success');
+
+    // ============ FUNGSI LOGIN ============
+    async function handleLogin() {
+        console.log('🟡 Tombol login diklik');
+        
+        const email = emailInput.value.trim();
+        const password = passwordInput.value;
+        
+        // Sembunyikan pesan sebelumnya
+        errorDiv.style.display = 'none';
+        successDiv.style.display = 'none';
+        
+        if (!email || !password) {
+            errorDiv.innerText = '❌ Email dan password harus diisi!';
+            errorDiv.style.display = 'block';
+            return;
+        }
+        
+        if (password.length < 6) {
+            errorDiv.innerText = '❌ Password minimal 6 karakter!';
+            errorDiv.style.display = 'block';
+            return;
+        }
+        
+        console.log('📧 Mencoba login dengan:', email);
+        
+        try {
+            // Coba login
+            let { data, error } = await supabase.auth.signInWithPassword({ email, password });
+            
+            if (error) {
+                console.log('⚠️ Login gagal:', error.message);
+                
+                // Coba daftar
+                const { error: signUpError } = await supabase.auth.signUp({ 
+                    email, 
+                    password,
+                    options: { emailRedirectTo: window.location.origin }
+                });
+                
+                if (signUpError) {
+                    console.error('❌ Gagal daftar:', signUpError);
+                    errorDiv.innerText = 'Gagal: ' + signUpError.message;
+                    errorDiv.style.display = 'block';
+                    return;
+                }
+                
+                successDiv.innerText = '✅ Akun dibuat! Silakan login lagi. (Cek email untuk verifikasi jika ada)';
+                successDiv.style.display = 'block';
+                return;
+            }
+            
+            // Login sukses
+            console.log('✅ Login sukses!');
+            successDiv.innerText = '✅ Login berhasil! Memuat dashboard...';
+            successDiv.style.display = 'block';
+            
+            // Tampilkan dashboard
+            setTimeout(() => {
+                authSection.style.display = 'none';
+                dashboardSection.style.display = 'block';
+                loadMeetings();
+            }, 500);
+            
+        } catch (err) {
+            console.error('💥 Error:', err);
+            errorDiv.innerText = 'Error: ' + (err.message || 'Koneksi gagal');
+            errorDiv.style.display = 'block';
+        }
+    }
+
+    // ============ FUNGSI LOGOUT ============
+    async function handleLogout() {
+        await supabase.auth.signOut();
+        authSection.style.display = 'block';
+        dashboardSection.style.display = 'none';
+        emailInput.value = '';
+        passwordInput.value = '';
+        console.log('👋 Logout berhasil');
+    }
+
+    // ============ LOAD MEETINGS ============
+    async function loadMeetings() {
+        console.log('🔄 Memuat data meeting...');
+        
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+            console.log('⚠️ Tidak ada user, kembali ke login');
+            handleLogout();
+            return;
+        }
+        
+        const { data, error } = await supabase
+            .from('meetings')
+            .select('*')
+            .order('meeting_date', { ascending: false });
+        
+        if (error) {
+            console.error('❌ Error load meetings:', error);
+            document.getElementById('meeting-list').innerHTML = `<p style="color: red;">Gagal: ${error.message}</p>`;
+            return;
+        }
+        
+        console.log(`✅ Load ${data.length} meeting`);
+        
+        // Update stats
+        document.getElementById('total-meetings').textContent = data.length;
+        let totalActions = 0;
+        data.forEach(m => {
+            try {
+                const actions = JSON.parse(m.action_items || '[]');
+                totalActions += actions.length;
+            } catch(e) {}
+        });
+        document.getElementById('total-actions').textContent = totalActions;
+        
+        // Render meetings
+        const container = document.getElementById('meeting-list');
+        if (data.length === 0) {
+            container.innerHTML = '<p style="color: #718096; text-align: center;">📭 Belum ada data rapat. Buat notula baru di atas!</p>';
+            return;
+        }
+        
+        container.innerHTML = data.map(meeting => `
+            <div class="meeting-item">
+                <div class="meeting-title">📌 ${escapeHtml(meeting.title)}</div>
+                <div class="meeting-date">📅 ${formatDate(meeting.meeting_date)}</div>
+                <div class="meeting-summary">📄 ${escapeHtml(meeting.summary || 'Tidak ada ringkasan')}</div>
+                <div class="button-group">
+                    <button onclick="deleteMeeting(${meeting.id})" class="danger btn-small">🗑️ Hapus</button>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    // ============ SAVE MEETING ============
+    async function handleSaveMeeting() {
+        const title = document.getElementById('title').value.trim();
+        const date = document.getElementById('date').value;
+        const summary = document.getElementById('summary').value.trim();
+        
+        if (!title || !date) {
+            alert('❌ Judul dan tanggal harus diisi!');
+            return;
+        }
+        
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+            alert('Sesi habis, silakan login ulang');
+            handleLogout();
+            return;
+        }
+        
+        const { error } = await supabase.from('meetings').insert([{ 
+            title, 
+            meeting_date: date, 
+            summary: summary || '', 
+            action_items: [],
+            user_id: user.id
+        }]);
+        
+        if (error) {
+            alert('❌ Gagal: ' + error.message);
+            return;
+        }
+        
+        alert('✅ Data tersimpan!');
+        document.getElementById('title').value = '';
+        document.getElementById('date').value = '';
+        document.getElementById('summary').value = '';
+        loadMeetings();
+    }
+
+    // ============ DELETE MEETING ============
+    window.deleteMeeting = async function(id) {
+        if (confirm('Yakin ingin menghapus data ini?')) {
+            const { error } = await supabase.from('meetings').delete().eq('id', id);
+            if (error) {
+                alert('Gagal hapus: ' + error.message);
+            } else {
+                alert('✅ Data dihapus!');
+                loadMeetings();
+            }
+        }
+    };
+
+    // ============ HELPER ============
+    function formatDate(dateString) {
+        if (!dateString) return '-';
+        try {
+            const date = new Date(dateString);
+            return date.toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric' });
+        } catch(e) {
+            return dateString;
+        }
+    }
+    
+    function escapeHtml(str) {
+        if (!str) return '';
+        return str.replace(/[&<>]/g, function(m) {
+            if (m === '&') return '&amp;';
+            if (m === '<') return '&lt;';
+            if (m === '>') return '&gt;';
+            return m;
+        });
+    }
+
+    // ============ CEK SESSION AWAL ============
+    async function checkSession() {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+            authSection.style.display = 'none';
+            dashboardSection.style.display = 'block';
+            loadMeetings();
+        } else {
+            authSection.style.display = 'block';
+            dashboardSection.style.display = 'none';
+        }
+    }
+
+    // ============ PASANG EVENT LISTENER ============
+    loginBtn.addEventListener('click', handleLogin);
+    logoutBtn.addEventListener('click', handleLogout);
+    saveMeetingBtn.addEventListener('click', handleSaveMeeting);
+    
+    // Enter key support
+    emailInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') handleLogin(); });
+    passwordInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') handleLogin(); });
+    
+    // Jalankan
+    checkSession();
+</script>
+</body>
+</html>
